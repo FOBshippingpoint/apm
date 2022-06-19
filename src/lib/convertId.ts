@@ -17,14 +17,14 @@ async function getIdDict(update = false): Promise<{ [key: string]: string }> {
       subDir: 'package',
       keyText: dictUrl,
     });
-    return convertJson ? fs.readJsonSync(convertJson) : {};
+    return convertJson ? await fs.readJson(convertJson) : {};
   } else {
     const convertJson = await existsTempFile(
       path.join('package', path.basename(dictUrl)),
       dictUrl
     );
     if (convertJson.exists) {
-      return fs.readJsonSync(convertJson.path);
+      return await fs.readJson(convertJson.path);
     } else {
       return {};
     }

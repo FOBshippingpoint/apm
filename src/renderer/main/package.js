@@ -6,11 +6,9 @@ import {
   existsSync,
   mkdir,
   readdir,
-  readdirSync,
-  readJsonSync,
+  readJson,
   rename,
-  renameSync,
-  rmdirSync,
+  rmdir,
 } from 'fs-extra';
 import * as matcher from 'matcher';
 import path from 'path';
@@ -434,7 +432,7 @@ async function getScriptsList(update = false) {
     });
     if (!scriptsJson) continue;
     /** @type {Scripts} */
-    const json = readJsonSync(scriptsJson);
+    const json = await readJson(scriptsJson);
     result.webpage = result.webpage.concat(json.webpage);
     result.scripts = result.scripts.concat(json.scripts);
   }
@@ -673,9 +671,9 @@ async function installPackage(
     const unzippedPath = await getUnzippedPath();
 
     if (installedPackage.info.installer) {
-      const searchFiles = (dirName) => {
+      const searchFiles = async (dirName) => {
         let result = [];
-        const dirents = readdirSync(dirName, {
+        const dirents = await readdir(dirName, {
           withFileTypes: true,
         });
         for (const dirent of dirents) {
@@ -981,8 +979,8 @@ async function installScript(instPath) {
   const pluginExtRegex = /\.(auf|aui|auo|auc|aul)$/;
   const scriptExtRegex = /\.(anm|obj|cam|tra|scn)$/;
 
-  const searchScriptRoot = (dirName) => {
-    const dirents = readdirSync(dirName, {
+  const searchScriptRoot = async (dirName) => {
+    const dirents = await readdir(dirName, {
       withFileTypes: true,
     });
     return dirents.find((i) => i.isFile() && scriptExtRegex.test(i.name))
@@ -992,8 +990,8 @@ async function installScript(instPath) {
           .flatMap((i) => searchScriptRoot(path.join(dirName, i.name)));
   };
 
-  const extExists = (dirName, regex) => {
-    const dirents = readdirSync(dirName, {
+  const extExists = async (dirName, regex) => {
+    const dirents = await readdir(dirName, {
       withFileTypes: true,
     });
     return dirents.filter((i) => i.isFile() && regex.test(i.name)).length > 0
@@ -1091,8 +1089,8 @@ async function installScript(instPath) {
 
     // Rename the extracted folder
     const newPath = path.join(path.dirname(unzippedPath), id);
-    if (existsSync(newPath)) rmdirSync(newPath, { recursive: true });
-    renameSync(unzippedPath, newPath);
+    if (existsSync(newPath)) await rmdir(newPath, { recursive: true });
+    await rename(unzippedPath, newPath);
 
     // Save package information
     const packageItem = {

@@ -144,7 +144,7 @@ async function displayInstalledVersion(instPath) {
     ) {
       shortcut.addAviUtlShortcut(appDataPath, aviutlPath);
     } else {
-      shortcut.removeAviUtlShortcut(appDataPath);
+      await shortcut.removeAviUtlShortcut(appDataPath);
     }
   }
 }

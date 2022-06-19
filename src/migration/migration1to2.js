@@ -82,17 +82,20 @@ async function global() {
   const files = [
     path.join(dataFolder, 'mod.xml'),
     path.join(dataFolder, 'core/core.xml'),
-    ...fs
-      .readdirSync(path.join(dataFolder, 'package/'), { withFileTypes: true })
+    ...(
+      await fs.readdir(path.join(dataFolder, 'package/'), {
+        withFileTypes: true,
+      })
+    )
       .filter(
         (dirent) =>
           dirent.isFile() && dirent.name.endsWith('_packages_list.xml')
       )
       .map(({ name }) => path.join(dataFolder, 'package/', name)),
   ];
-  files.forEach((file) => {
+  files.forEach(async (file) => {
     try {
-      fs.unlinkSync(file);
+      await fs.unlink(file);
     } catch (e) {
       log.error(e);
     }
@@ -132,7 +135,7 @@ async function byFolder(instPath) {
   // 2. Renaming the local repository
   try {
     if (fs.existsSync(path.join(instPath, 'packages_list.xml'))) {
-      fs.renameSync(
+      await fs.rename(
         path.join(instPath, 'packages_list.xml'),
         path.join(instPath, 'packages.xml')
       );

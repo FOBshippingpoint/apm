@@ -1,6 +1,6 @@
 // import path from 'path';
 import { Core, List, Packages } from 'apm-schema';
-import fs, { readJSON, writeJson } from 'fs-extra';
+import fs, { readJson, unlink, writeJson } from 'fs-extra';
 import { getIdDict } from './convertId';
 
 // Functions to be exported
@@ -13,7 +13,7 @@ import { getIdDict } from './convertId';
  */
 async function getCore(coreListPath: string): Promise<Core> {
   if (fs.existsSync(coreListPath)) {
-    return (await readJSON(coreListPath)) as Core;
+    return (await readJson(coreListPath)) as Core;
   } else {
     throw new Error('The version file does not exist.');
   }
@@ -27,7 +27,7 @@ async function getCore(coreListPath: string): Promise<Core> {
  */
 async function getPackages(packagesListPath: string) {
   if (fs.existsSync(packagesListPath)) {
-    const packages = ((await readJSON(packagesListPath)) as Packages).packages;
+    const packages = ((await readJson(packagesListPath)) as Packages).packages;
 
     const convDict = await getIdDict();
     for (const packageItem of packages) {
@@ -91,7 +91,7 @@ async function removePackage(
   if (packages.length > 0) {
     await setPackages(packagesListPath, packages);
   } else {
-    fs.unlinkSync(packagesListPath);
+    await unlink(packagesListPath);
   }
 }
 
@@ -103,7 +103,7 @@ async function removePackage(
  */
 async function getMod(packagesListPath: string) {
   if (fs.existsSync(packagesListPath)) {
-    return (await readJSON(packagesListPath)) as List;
+    return (await readJson(packagesListPath)) as List;
   } else {
     throw new Error('The version file does not exist.');
   }

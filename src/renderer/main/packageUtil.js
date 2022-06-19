@@ -1,5 +1,5 @@
 import log from 'electron-log';
-import fs from 'fs-extra';
+import * as fs from 'fs-extra';
 import path from 'path';
 import apmJson from '../../lib/apmJson';
 import { download, existsTempFile, openDialog } from '../../lib/ipcWrapper';
@@ -158,25 +158,25 @@ async function downloadRepository(packageDataUrls) {
  * @param {string} instPath - An installation path
  * @returns {string[]} List of installed files
  */
-function getInstalledFiles(instPath) {
+async function getInstalledFiles(instPath) {
   const regex = /^(?!exedit).*\.(auf|aui|auo|auc|aul|anm|obj|cam|tra|scn)$/;
-  const safeReaddirSync = (path, option) => {
+  const safeReaddir = async (path) => {
     try {
-      return fs.readdirSync(path, option);
+      return await fs.readdir(path, { withFileTypes: true });
     } catch (e) {
       if (e.code === 'ENOENT') return [];
       log.error(e);
       throw e;
     }
   };
-  const readdir = (dir) =>
-    safeReaddirSync(dir, { withFileTypes: true })
+  const readdir = async (dir) =>
+    await safeReaddir(dir)
       .filter((i) => i.isFile() && regex.test(i.name))
       .map((i) => i.name);
-  return readdir(instPath).concat(
-    readdir(path.join(instPath, 'plugins')).map((i) => 'plugins/' + i),
-    readdir(path.join(instPath, 'script')).map((i) => 'script/' + i),
-    safeReaddirSync(path.join(instPath, 'script'), { withFileTypes: true })
+  return (await readdir(instPath)).concat(
+    await readdir(path.join(instPath, 'plugins')).map((i) => 'plugins/' + i),
+    await readdir(path.join(instPath, 'script')).map((i) => 'script/' + i),
+    (await safeReaddir(path.join(instPath, 'script')))
       .filter((i) => i.isDirectory())
       .map((i) => 'script/' + i.name)
       .flatMap((i) => readdir(path.join(instPath, i)).map((j) => i + '/' + j))
