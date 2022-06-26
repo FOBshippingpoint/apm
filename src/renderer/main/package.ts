@@ -1,3 +1,4 @@
+import { Scripts } from 'apm-schema';
 import { execSync } from 'child_process';
 import log from 'electron-log';
 import Store from 'electron-store';
@@ -12,15 +13,16 @@ import {
   renameSync,
   rmdirSync,
 } from 'fs-extra';
+import List, { ListItem } from 'list.js';
 import * as matcher from 'matcher';
 import path from 'path';
 import { safeRemove } from '../../lib/safeRemove';
 import twemoji from 'twemoji';
-import apmJson from '../../lib/apmJson';
-import buttonTransition from '../../lib/buttonTransition';
-import { compareVersion } from '../../lib/compareVersion';
+import * as apmJson from '../../lib/apmJson';
+import * as buttonTransition from '../../lib/buttonTransition';
+import compareVersion from '../../lib/compareVersion';
 import { getHash } from '../../lib/getHash';
-import integrity from '../../lib/integrity';
+import { checkIntegrity, verifyFile } from '../../lib/integrity';
 import {
   download,
   getNicommonsData,
@@ -28,11 +30,12 @@ import {
   openPath,
   openYesNoDialog,
 } from '../../lib/ipcWrapper';
-import modList from '../../lib/modList';
-import parseJson from '../../lib/parseJson';
+import * as modList from '../../lib/modList';
+import * as parseJson from '../../lib/parseJson';
 import replaceText from '../../lib/replaceText';
 import unzip from '../../lib/unzip';
 import createList from '../../lib/updatableList';
+import { PackageItem } from '../../types/packageItem';
 import { install, verifyFilesByCount } from './common';
 import packageUtil from './packageUtil';
 const store = new Store();
@@ -40,13 +43,15 @@ const store = new Store();
 
 // To avoid a bug in the library
 // https://github.com/sindresorhus/matcher/issues/32
-const isMatch = (input, pattern) =>
-  pattern.some((p) => matcher.isMatch(input, p));
+const isMatch = (
+  input: string | readonly string[],
+  pattern: readonly string[]
+) => pattern.some((p) => matcher.isMatch(input, p));
 
-let selectedEntry;
-let selectedEntryType;
+let selectedEntry: PackageItem | Scripts['webpage'][number];
+let selectedEntryType: string;
 const entryType = { package: 'package', scriptSite: 'script' };
-let listJS;
+let listJS: List;
 
 /**
  * Get the date today
@@ -69,7 +74,7 @@ function getDate() {
  * @param {string} instPath - An installation path
  * @returns {Promise.<object[]>} An object of packages
  */
-async function getPackages(instPath) {
+async function getPackages(instPath: string) {
   return await packageUtil.getPackages(modList.getPackagesDataUrl(instPath));
 }
 
@@ -78,7 +83,7 @@ async function getPackages(instPath) {
  *
  * @param {string} instPath - An installation path.
  */
-async function setPackagesList(instPath) {
+async function setPackagesList(instPath: string) {
   const packagesSort = document.getElementById('packages-sort');
   const packagesList = document.getElementById('packages-list');
   const packagesList2 = document.getElementById('packages-list2');
@@ -115,7 +120,7 @@ async function setPackagesList(instPath) {
       .map(([i, columnName]) => {
         const sortBtn = document
           .getElementById('sort-template')
-          .cloneNode(true);
+          .cloneNode(true) as HTMLButtonElement;
         sortBtn.removeAttribute('id');
         sortBtn.dataset.sort = columnName;
         sortBtn.innerText = columnsDisp[i];
@@ -140,7 +145,7 @@ async function setPackagesList(instPath) {
       p.installationStatus === packageUtil.states.manuallyInstalled
   )) {
     for (const release of p.info.releases) {
-      if (await integrity.checkIntegrity(instPath, release.integrity.file)) {
+      if (await checkIntegrity(instPath, release.integrity.file)) {
         apmJson.addPackage(instPath, {
           ...p,
           info: { ...p.info, latestVersion: release.version },
@@ -158,36 +163,56 @@ async function setPackagesList(instPath) {
   packages = packageUtil.getPackagesStatus(instPath, packages);
 
   // show the package list
-  const makeLiFromArray = (columnList) => {
-    const li = document.getElementById('list-template').cloneNode(true);
+  const makeLiFromArray = (columnList: string[]) => {
+    const li = document
+      .getElementById('list-template')
+      .cloneNode(true) as HTMLLIElement;
     li.removeAttribute('id');
-    const divs = columnList.map(
-      (tdName) => li.getElementsByClassName(tdName)[0]
+    const result: { li: HTMLLIElement; [key: string]: HTMLElement } = {
+      li: li,
+    };
+    columnList.forEach(
+      (tdName) =>
+        (result[tdName] = li.getElementsByClassName(tdName)[0] as HTMLElement)
     );
-    return [li].concat(divs);
+    return result;
   };
 
   packagesList.innerHTML = null;
 
   for (const packageItem of packages) {
-    const [
+    const {
       li,
       name,
-      overview,
       developer,
       type,
-      latestVersion,
-      installationStatus,
+      overview,
       description,
       pageURL,
+      latestVersion,
       dependencyInformation,
       statusInformation,
-    ] = makeLiFromArray([...columns, 'statusInformation']);
+      installationStatus,
+    } = makeLiFromArray([...columns, 'statusInformation']) as {
+      li: HTMLLIElement;
+      name: HTMLHeadingElement;
+      developer: HTMLDivElement;
+      type: HTMLDivElement;
+      overview: HTMLDivElement;
+      description: HTMLDivElement;
+      pageURL: HTMLAnchorElement;
+      latestVersion: HTMLDivElement;
+      dependencyInformation: HTMLDivElement;
+      statusInformation: HTMLDivElement;
+      installationStatus: HTMLDivElement;
+    };
     li.addEventListener('click', () => {
       selectedEntry = packageItem;
       selectedEntryType = entryType.package;
       li.getElementsByTagName('input')[0].checked = true;
-      for (const tmpli of packagesList.getElementsByTagName('li')) {
+      for (const tmpli of packagesList.getElementsByTagName(
+        'li'
+      ) as unknown as HTMLLIElement[]) {
         tmpli.classList.remove('list-group-item-secondary');
       }
       li.classList.add('list-group-item-secondary');
@@ -198,7 +223,9 @@ async function setPackagesList(instPath) {
       ? `${packageItem.info.developer}（オリジナル：${packageItem.info.originalDeveloper}）`
       : packageItem.info.developer;
     packageUtil.parsePackageType(packageItem.type).forEach((e) => {
-      const typeItem = document.getElementById('tag-template').cloneNode(true);
+      const typeItem = document
+        .getElementById('tag-template')
+        .cloneNode(true) as HTMLSpanElement;
       typeItem.removeAttribute('id');
       typeItem.innerText = e;
       type.appendChild(typeItem);
@@ -255,19 +282,31 @@ async function setPackagesList(instPath) {
   }
 
   for (const webpage of (await getScriptsList()).webpage) {
-    const [
+    const {
       li,
       name,
-      overview,
       developer,
       type,
-      latestVersion,
-      installedVersion,
+      overview,
       description,
       pageURL,
+      latestVersion,
       dependencyInformation,
       statusInformation,
-    ] = makeLiFromArray([...columns, 'statusInformation']);
+      installationStatus,
+    } = makeLiFromArray([...columns, 'statusInformation']) as {
+      li: HTMLLIElement;
+      name: HTMLHeadingElement;
+      developer: HTMLDivElement;
+      type: HTMLDivElement;
+      overview: HTMLDivElement;
+      description: HTMLDivElement;
+      pageURL: HTMLAnchorElement;
+      latestVersion: HTMLDivElement;
+      dependencyInformation: HTMLDivElement;
+      statusInformation: HTMLDivElement;
+      installationStatus: HTMLDivElement;
+    };
     li.addEventListener('click', () => {
       selectedEntry = webpage;
       selectedEntryType = entryType.scriptSite;
@@ -280,7 +319,9 @@ async function setPackagesList(instPath) {
     name.innerText = webpage.developer;
     overview.innerText = '配布サイトからスクリプトをインストール';
     developer.innerText = webpage.developer;
-    const typeItem = document.getElementById('tag-template').cloneNode(true);
+    const typeItem = document
+      .getElementById('tag-template')
+      .cloneNode(true) as HTMLSpanElement;
     typeItem.removeAttribute('id');
     typeItem.classList.replace(
       'list-group-item-secondary',
@@ -289,7 +330,7 @@ async function setPackagesList(instPath) {
     typeItem.innerText = 'スクリプト配布サイト';
     type.appendChild(typeItem);
     latestVersion.innerText = '';
-    installedVersion.innerText = '';
+    installationStatus.innerText = '';
     description.innerText = webpage?.description ?? '';
     pageURL.innerText = webpage.url;
     pageURL.href = webpage.url;
@@ -315,15 +356,23 @@ async function setPackagesList(instPath) {
 
   // list manually added packages
   for (const ef of manuallyInstalledFiles) {
-    const [
+    const {
       li,
       name,
-      overview,
       developer,
       type,
+      overview,
       latestVersion,
       installationStatus,
-    ] = makeLiFromArray(columns);
+    } = makeLiFromArray(columns) as {
+      li: HTMLLIElement;
+      name: HTMLHeadingElement;
+      developer: HTMLDivElement;
+      type: HTMLDivElement;
+      overview: HTMLDivElement;
+      latestVersion: HTMLDivElement;
+      installationStatus: HTMLDivElement;
+    };
     li.classList.add('list-group-item-secondary');
     li.getElementsByTagName('input')[0].remove(); // remove the radio button
     name.innerText = ef;
@@ -354,10 +403,10 @@ async function setPackagesList(instPath) {
 
   // settings page
   if (store.has('modDate.packages')) {
-    const modDate = new Date(store.get('modDate.packages'));
+    const modDate = new Date(store.get('modDate.packages') as number);
     replaceText('packages-mod-date', modDate.toLocaleString());
 
-    const checkDate = new Date(store.get('checkDate.packages'));
+    const checkDate = new Date(store.get('checkDate.packages') as number);
     replaceText('packages-check-date', checkDate.toLocaleString());
   } else {
     replaceText('packages-mod-date', '未取得');
@@ -371,14 +420,17 @@ async function setPackagesList(instPath) {
  *
  * @param {string} instPath - An installation path.
  */
-async function checkPackagesList(instPath) {
-  const btn = document.getElementById('check-packages-list');
-  let enableButton;
-  if (btn) enableButton = buttonTransition.loading(btn, '更新');
+async function checkPackagesList(instPath: string) {
+  const btn = document.getElementById(
+    'check-packages-list'
+  ) as HTMLButtonElement;
+  const enableButton = btn
+    ? buttonTransition.loading(btn, '更新').enableButton
+    : undefined;
 
   const overlay = document.getElementById('packages-table-overlay');
   if (overlay) {
-    overlay.style.zIndex = 1000;
+    overlay.style.zIndex = '1000';
     overlay.classList.add('show');
   }
 
@@ -402,7 +454,7 @@ async function checkPackagesList(instPath) {
 
   if (overlay) {
     overlay.classList.remove('show');
-    overlay.style.zIndex = -1;
+    overlay.style.zIndex = '-1';
   }
 
   if (btn) {
@@ -421,7 +473,7 @@ async function checkPackagesList(instPath) {
 async function getScriptsList(update = false) {
   const dictUrl = await modList.getScriptsDataUrl();
   /** @type {Scripts} */
-  const result = {
+  const result: { webpage: Scripts['webpage']; scripts: Scripts['scripts'] } = {
     webpage: [],
     scripts: [],
   };
@@ -434,7 +486,7 @@ async function getScriptsList(update = false) {
     });
     if (!scriptsJson) continue;
     /** @type {Scripts} */
-    const json = readJsonSync(scriptsJson);
+    const json: Scripts = readJsonSync(scriptsJson);
     result.webpage = result.webpage.concat(json.webpage);
     result.scripts = result.scripts.concat(json.scripts);
   }
@@ -459,10 +511,10 @@ async function getScriptsList(update = false) {
  * @param {string} [strArchivePath] - Path to the downloaded archive.
  */
 async function installPackage(
-  instPath,
-  packageToInstall,
+  instPath: string,
+  packageToInstall?: PackageItem,
   direct = false,
-  strArchivePath
+  strArchivePath?: string
 ) {
   const roles = {
     Event_Handler: 'Event_Handler',
@@ -489,8 +541,8 @@ async function installPackage(
     return;
   }
 
-  const btn = document.getElementById('install-package');
-  const enableButton = btn
+  const btn = document.getElementById('install-package') as HTMLButtonElement;
+  const { enableButton } = btn
     ? buttonTransition.loading(btn, 'インストール')
     : null;
 
@@ -509,7 +561,7 @@ async function installPackage(
     return;
   }
 
-  let installedPackage;
+  let installedPackage: PackageItem;
 
   if (packageToInstall) {
     installedPackage = { ...packageToInstall };
@@ -529,7 +581,7 @@ async function installPackage(
       return;
     }
 
-    if (selectedEntry.id?.startsWith('script_')) {
+    if ((selectedEntry as PackageItem).id?.startsWith('script_')) {
       log.error('This script cannot be overwritten.');
       if (btn) {
         buttonTransition.message(
@@ -544,7 +596,7 @@ async function installPackage(
       return;
     }
 
-    installedPackage = { ...selectedEntry };
+    installedPackage = { ...selectedEntry } as PackageItem;
   }
 
   let archivePath = '';
@@ -577,7 +629,7 @@ async function installPackage(
 
     if (integrityForArchive) {
       // Verify file integrity
-      while (!(await integrity.verifyFile(archivePath, integrityForArchive))) {
+      while (!(await verifyFile(archivePath, integrityForArchive))) {
         const dialogResult = await openYesNoDialog(
           'エラー',
           'ダウンロードされたファイルは破損しています。再ダウンロードしますか？'
@@ -673,8 +725,8 @@ async function installPackage(
     const unzippedPath = await getUnzippedPath();
 
     if (installedPackage.info.installer) {
-      const searchFiles = (dirName) => {
-        let result = [];
+      const searchFiles = (dirName: string) => {
+        let result: string[][] = [];
         const dirents = readdirSync(dirName, {
           withFileTypes: true,
         });
@@ -742,9 +794,9 @@ async function installPackage(
  *
  * @param {string} instPath - An installation path.
  */
-async function uninstallPackage(instPath) {
-  const btn = document.getElementById('uninstall-package');
-  const enableButton = buttonTransition.loading(btn, 'アンインストール');
+async function uninstallPackage(instPath: string) {
+  const btn = document.getElementById('uninstall-package') as HTMLButtonElement;
+  const { enableButton } = buttonTransition.loading(btn, 'アンインストール');
 
   if (selectedEntryType !== entryType.package) {
     log.error('A package to install is not selected.');
@@ -785,7 +837,7 @@ async function uninstallPackage(instPath) {
     return;
   }
 
-  const uninstalledPackage = { ...selectedEntry };
+  const uninstalledPackage = { ...selectedEntry } as PackageItem;
 
   const filesToRemove = [];
   for (const file of uninstalledPackage.info.files) {
@@ -844,8 +896,10 @@ async function uninstallPackage(instPath) {
  * Open the download folder of the package.
  */
 async function openPackageFolder() {
-  const btn = document.getElementById('open-package-folder');
-  const enableButton = buttonTransition.loading(
+  const btn = document.getElementById(
+    'open-package-folder'
+  ) as HTMLButtonElement;
+  const { enableButton } = buttonTransition.loading(
     btn,
     'ダウンロードフォルダを開く'
   );
@@ -876,7 +930,7 @@ async function openPackageFolder() {
     return;
   }
 
-  const exists = await openPath(`package/${selectedEntry.id}`);
+  const exists = await openPath(`package/${(selectedEntry as PackageItem).id}`);
 
   if (!exists) {
     log.error('The package has not been downloaded.');
@@ -901,10 +955,10 @@ async function openPackageFolder() {
  *
  * @param {string} instPath - An installation path.
  */
-async function installScript(instPath) {
-  const btn = document.getElementById('install-package');
-  const enableButton = buttonTransition.loading(btn);
-  const url = selectedEntry.url;
+async function installScript(instPath: string) {
+  const btn = document.getElementById('install-package') as HTMLButtonElement;
+  const { enableButton } = buttonTransition.loading(btn);
+  const url = (selectedEntry as Scripts['webpage'][number]).url;
 
   if (!instPath) {
     log.error('An installation path is not selected.');
@@ -981,7 +1035,7 @@ async function installScript(instPath) {
   const pluginExtRegex = /\.(auf|aui|auo|auc|aul)$/;
   const scriptExtRegex = /\.(anm|obj|cam|tra|scn)$/;
 
-  const searchScriptRoot = (dirName) => {
+  const searchScriptRoot = (dirName: string) => {
     const dirents = readdirSync(dirName, {
       withFileTypes: true,
     });
@@ -992,16 +1046,18 @@ async function installScript(instPath) {
           .flatMap((i) => searchScriptRoot(path.join(dirName, i.name)));
   };
 
-  const extExists = (dirName, regex) => {
+  const extExists = (dirName: string, regex: RegExp) => {
     const dirents = readdirSync(dirName, {
       withFileTypes: true,
     });
-    return dirents.filter((i) => i.isFile() && regex.test(i.name)).length > 0
-      ? true
-      : dirents
-          .filter((i) => i.isDirectory())
-          .map((i) => extExists(path.join(dirName, i.name), regex))
-          .some((e) => e);
+    return (
+      dirents.filter((i) => i.isFile() && regex.test(i.name)).length > 0
+        ? true
+        : dirents
+            .filter((i) => i.isDirectory())
+            .map((i) => extExists(path.join(dirName, i.name), regex))
+            .some((e) => e)
+    ) as boolean;
   };
 
   try {
@@ -1140,7 +1196,11 @@ const filterButtons = new Set();
  * @param {HTMLCollectionOf<HTMLButtonElement>} btns - A list of buttons
  * @param {HTMLButtonElement} btn - A button selected
  */
-function listFilter(column, btns, btn) {
+function listFilter(
+  column: string,
+  btns: HTMLCollectionOf<HTMLButtonElement>,
+  btn: HTMLButtonElement
+) {
   if (btn.classList.contains('selected')) {
     btn.classList.remove('selected');
     listJS.filter();
@@ -1159,8 +1219,8 @@ function listFilter(column, btns, btn) {
       const query = packageUtil
         .parsePackageType([btn.dataset.typeFilter])
         .toString();
-      filterFunc = (item) => {
-        if (item.values().type.includes(query)) {
+      filterFunc = (item: ListItem) => {
+        if ((item.values() as { type: string[] }).type.includes(query)) {
           return true;
         } else {
           return false;
@@ -1168,11 +1228,12 @@ function listFilter(column, btns, btn) {
       };
     } else if (column === 'installationStatus') {
       const query = btn.dataset.installFilter;
-      const getValue = (item) => {
-        return item.values().installationStatus;
+      const getValue = (item: ListItem) => {
+        return (item.values() as { installationStatus: string })
+          .installationStatus;
       };
       if (query === 'true') {
-        filterFunc = (item) => {
+        filterFunc = (item: ListItem) => {
           const value = getValue(item);
           if (
             value.startsWith(packageUtil.states.installed) ||
@@ -1184,7 +1245,7 @@ function listFilter(column, btns, btn) {
           }
         };
       } else if (query === 'manual') {
-        filterFunc = (item) => {
+        filterFunc = (item: ListItem) => {
           const value = getValue(item);
           if (value === packageUtil.states.manuallyInstalled) {
             return true;
@@ -1193,7 +1254,7 @@ function listFilter(column, btns, btn) {
           }
         };
       } else if (query === 'false') {
-        filterFunc = (item) => {
+        filterFunc = (item: ListItem) => {
           const value = getValue(item);
           if (
             value === packageUtil.states.notInstalled ||
@@ -1218,21 +1279,30 @@ function listFilter(column, btns, btn) {
  *
  * @param {string} instPath - An installation path.
  */
-async function displayNicommonsIdList(instPath) {
+async function displayNicommonsIdList(instPath: string) {
   const packages = await getPackages(instPath);
+  type PackageItemWithNicommonsId = {
+    info: {
+      name: string;
+      developer: string;
+      originalDeveloper?: string;
+      nicommons: string;
+    };
+    type: string[];
+  };
   const packagesWithNicommonsId = [
     {
       info: { name: 'AviUtl', developer: 'KENくん', nicommons: 'im1696493' },
-      type: [],
-    },
+      type: [] as never[],
+    } as PackageItemWithNicommonsId,
     {
       info: {
         name: 'AviUtl Package Manager',
         developer: 'Team apm',
         nicommons: 'nc251912',
       },
-      type: [],
-    },
+      type: [] as never[],
+    } as PackageItemWithNicommonsId,
     ...packages.filter((value) => {
       return (
         apmJson.has(instPath, 'packages.' + value.id) && value.info.nicommons
@@ -1242,24 +1312,34 @@ async function displayNicommonsIdList(instPath) {
 
   // show the package list
   const columns = ['thumbnail', 'name', 'developer', 'type', 'nicommons'];
-  const makeLiFromArray = (columnList) => {
-    const li = document.getElementById('nicommons-id-template').cloneNode(true);
+  const makeLiFromArray = (columnList: string[]) => {
+    const li = document
+      .getElementById('nicommons-id-template')
+      .cloneNode(true) as HTMLLIElement;
     li.removeAttribute('id');
-    const divs = columnList.map(
-      (tdName) => li.getElementsByClassName(tdName)[0]
+    const result: { li: HTMLLIElement; [key: string]: HTMLElement } = {
+      li: li,
+    };
+    columnList.forEach(
+      (tdName) =>
+        (result[tdName] = li.getElementsByClassName(tdName)[0] as HTMLElement)
     );
-    return [li].concat(divs);
+    return result;
   };
 
   const updateTextarea = () => {
-    const checkedId = [];
-    document.getElementsByName('nicommons-id').forEach((checkbox) => {
+    const checkedId: string[] = [];
+    (
+      document.getElementsByName(
+        'nicommons-id'
+      ) as unknown as HTMLInputElement[]
+    ).forEach((checkbox) => {
       if (checkbox.checked) checkedId.push(checkbox.value);
     });
 
     const nicommonsIdTextarea = document.getElementById(
       'nicommons-id-textarea'
-    );
+    ) as HTMLTextAreaElement;
     nicommonsIdTextarea.value = checkedId.join(' ');
   };
 
@@ -1267,8 +1347,16 @@ async function displayNicommonsIdList(instPath) {
   nicommonsIdList.innerHTML = null;
 
   for (const packageItem of packagesWithNicommonsId) {
-    const [li, thumbnail, name, developer, type, nicommons] =
-      makeLiFromArray(columns);
+    const { li, thumbnail, name, developer, type, nicommons } = makeLiFromArray(
+      columns
+    ) as {
+      li: HTMLLIElement;
+      thumbnail: HTMLDivElement;
+      name: HTMLHeadingElement;
+      developer: HTMLDivElement;
+      type: HTMLDivElement;
+      nicommons: HTMLDivElement;
+    };
 
     const checkbox = li.getElementsByTagName('input')[0];
     checkbox.value = packageItem.info.nicommons;
@@ -1280,14 +1368,18 @@ async function displayNicommonsIdList(instPath) {
       ? `${packageItem.info.developer}（オリジナル：${packageItem.info.originalDeveloper}）`
       : packageItem.info.developer;
     packageUtil.parsePackageType(packageItem.type).forEach((e) => {
-      const typeItem = document.getElementById('tag-template').cloneNode(true);
+      const typeItem = document
+        .getElementById('tag-template')
+        .cloneNode(true) as HTMLSpanElement;
       typeItem.removeAttribute('id');
       typeItem.innerText = e;
       type.appendChild(typeItem);
     });
     nicommons.innerText = packageItem.info.nicommons;
 
-    const nicommonsData = await getNicommonsData(packageItem.info.nicommons);
+    const nicommonsData = (await getNicommonsData(
+      packageItem.info.nicommons
+    )) as { [key: string]: { [key: string]: string } };
     if (nicommonsData && 'node' in nicommonsData) {
       const img = document.createElement('img');
       img.src = nicommonsData.node.thumbnailURL.replace('size=l', 'size=s');

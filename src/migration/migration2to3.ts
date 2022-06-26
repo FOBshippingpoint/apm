@@ -2,7 +2,7 @@ import log from 'electron-log';
 import Store from 'electron-store';
 import fs, { writeJson } from 'fs-extra';
 import path from 'path';
-import apmJson from '../lib/apmJson';
+import * as apmJson from '../lib/apmJson';
 import { download, openDialog } from '../lib/ipcWrapper';
 import migration1to2 from './migration1to2';
 import parseXML from './parseXML';
@@ -64,7 +64,7 @@ async function byFolder(instPath: string) {
   // Guard condition
   // The 'dataVersion' is always present due to previous migrations.
   // version: '2' or '3' or later
-  const version = apmJson.get(instPath, 'dataVersion') as string;
+  const version = apmJson.get(instPath, 'dataVersion') as unknown as string;
   if (version !== '2') return;
 
   // Main
@@ -74,7 +74,9 @@ async function byFolder(instPath: string) {
   await download(jsonPath, { subDir: 'migration2to3', keyText: jsonPath });
 
   // 2. Update the path to the online and local xml files.
-  const packages = apmJson.get(instPath, 'packages');
+  const packages = apmJson.get(instPath, 'packages') as unknown as {
+    [key: string]: { repository: string };
+  };
   for (const id of Object.keys(packages)) {
     if (Object.hasOwn(packages[id], 'repository'))
       delete packages[id].repository;

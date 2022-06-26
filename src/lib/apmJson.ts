@@ -7,16 +7,7 @@ import {
 import log from 'electron-log';
 import { readJsonSync, writeJsonSync } from 'fs-extra';
 import path from 'path';
-
-/**
- * Returns the path of `apm.json`.
- *
- * @param {string} instPath - An installation path
- * @returns {string} The path of `apm.json`
- */
-function getPath(instPath) {
-  return path.join(instPath, 'apm.json');
-}
+import { ApmJsonObject } from '../types/apmJson';
 
 /**
  * Gets the object parsed from `apm.json`.
@@ -24,17 +15,17 @@ function getPath(instPath) {
  * @param {string} instPath - An installation path
  * @returns {object} An object like `package.json`
  */
-function getApmJson(instPath) {
+function getApmJson(instPath: string) {
   try {
     const value = readJsonSync(getPath(instPath));
     if (typeof value === 'object') {
-      return value;
+      return value as ApmJsonObject;
     } else {
       throw new Error('Invalid apm.json.');
     }
   } catch (e) {
     if (e.code !== 'ENOENT') log.error(e);
-    return { dataVersion: '3', core: {}, packages: {} };
+    return { dataVersion: '3', core: {}, packages: {} } as ApmJsonObject;
   }
 }
 
@@ -44,11 +35,21 @@ function getApmJson(instPath) {
  * @param {string} instPath - An installation path
  * @param {object} object - An object to write
  */
-function setApmJson(instPath, object) {
+function setApmJson(instPath: string, object: unknown) {
   writeJsonSync(getPath(instPath), object, { spaces: 2 });
 }
 
 // Functions to be exported
+
+/**
+ * Returns the path of `apm.json`.
+ *
+ * @param {string} instPath - An installation path
+ * @returns {string} The path of `apm.json`
+ */
+export function getPath(instPath: string) {
+  return path.join(instPath, 'apm.json');
+}
 
 /**
  * Checks whether `apm.json` has the property.
@@ -57,7 +58,7 @@ function setApmJson(instPath, object) {
  * @param {string} path - Key to check existing
  * @returns {boolean} Whether `apm.json` has the property.
  */
-function has(instPath, path) {
+export function has(instPath: string, path: string) {
   return hasProperty(getApmJson(instPath), path);
 }
 
@@ -69,7 +70,7 @@ function has(instPath, path) {
  * @param {any} [defaultValue] - A value replaced when the property don't exists.
  * @returns {any} The property selected by key.
  */
-function get(instPath, path = '', defaultValue) {
+export function get(instPath: string, path = '', defaultValue?: unknown) {
   return getProperty(getApmJson(instPath), path, defaultValue);
 }
 
@@ -80,7 +81,7 @@ function get(instPath, path = '', defaultValue) {
  * @param {string} path - Key to set value
  * @param {any} [value] - A value to set
  */
-function set(instPath, path, value) {
+export function set(instPath: string, path: string, value: unknown) {
   const object = setProperty(getApmJson(instPath), path, value);
   setApmJson(instPath, object);
 }
@@ -91,11 +92,13 @@ function set(instPath, path, value) {
  * @param {string} instPath - An installation path
  * @param {string} path - Key to delete value
  */
-function deleteItem(instPath, path) {
+export function deleteItem(instPath: string, path: string) {
   const object = getApmJson(instPath);
   deleteProperty(object, path);
   setApmJson(instPath, object);
 }
+
+export { deleteItem as delete };
 
 /**
  * Sets the core version to `apm.json`.
@@ -104,9 +107,11 @@ function deleteItem(instPath, path) {
  * @param {string} program - A name of the program
  * @param {string} version - A version of the program
  */
-function setCore(instPath, program, version) {
+export function setCore(instPath: string, program: string, version: string) {
   set(instPath, `core.${program}`, version);
 }
+
+type PackageItem = { id: string; info: { latestVersion: string } };
 
 /**
  * Adds the information of the package to `apm.json`.
@@ -114,7 +119,7 @@ function setCore(instPath, program, version) {
  * @param {string} instPath - An installation path
  * @param {object} packageItem - An information of a package
  */
-function addPackage(instPath, packageItem) {
+export function addPackage(instPath: string, packageItem: PackageItem) {
   set(instPath, `packages.${packageItem.id}`, {
     id: packageItem.id,
     version: packageItem.info.latestVersion,
@@ -127,18 +132,6 @@ function addPackage(instPath, packageItem) {
  * @param {string} instPath - An installation path
  * @param {object} packageItem - An information of a package
  */
-function removePackage(instPath, packageItem) {
+export function removePackage(instPath: string, packageItem: PackageItem) {
   deleteItem(instPath, `packages.${packageItem.id}`);
 }
-
-const apmJson = {
-  getPath,
-  has,
-  get,
-  set,
-  delete: deleteItem,
-  setCore,
-  addPackage,
-  removePackage,
-};
-export default apmJson;
