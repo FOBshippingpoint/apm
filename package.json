@@ -24,7 +24,8 @@
     "release:patch": "standard-version --release-as patch && conventional-github-releaser -p angular --draft",
     "release:minor": "standard-version --release-as minor && conventional-github-releaser -p angular --draft",
     "release:major": "standard-version --release-as major && conventional-github-releaser -p angular --draft",
-    "notices": "yarn licenses generate-disclaimer --frozen-lockfile --prod --ignore-platform --ignore-engines --ignore-optional > ThirdPartyNotices.txt"
+    "notices": "yarn licenses generate-disclaimer --frozen-lockfile --prod --ignore-platform --ignore-engines --ignore-optional > ThirdPartyNotices.txt",
+    "test": "jest __tests__/"
   },
   "engines": {
     "node": "14.x || 16.x"
@@ -58,6 +59,9 @@
     "win-7zip": "^0.1.1"
   },
   "devDependencies": {
+    "@babel/core": "^7.20.7",
+    "@babel/preset-env": "^7.20.2",
+    "@babel/preset-typescript": "^7.18.6",
     "@commitlint/cli": "^17.3.0",
     "@commitlint/config-conventional": "^17.3.0",
     "@electron-forge/cli": "^6.0.4",
@@ -81,6 +85,7 @@
     "@typescript-eslint/parser": "^5.47.1",
     "@vercel/webpack-asset-relocator-loader": "1.7.3",
     "apm-schema": "team-apm/apm-schema#v3.2.1",
+    "babel-jest": "^29.3.1",
     "commitizen": "^4.2.6",
     "conventional-github-releaser": "^3.1.5",
     "cross-env": "^7.0.3",
@@ -98,6 +103,8 @@
     "fork-ts-checker-webpack-plugin": "^7.2.14",
     "html-loader": "^4.2.0",
     "husky": "^8.0.2",
+    "jest": "^29.3.1",
+    "jest-environment-jsdom": "^29.3.1",
     "lint-staged": "^13.1.0",
     "mini-css-extract-plugin": "^2.7.2",
     "node-loader": "^2.0.0",

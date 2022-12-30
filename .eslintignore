@@ -1,3 +1,7 @@
 /node_modules/**
 /out/**
 /.webpack/**
+jest.config.js
+babel.config.js
+src/__tests__/**
+coverage/**
