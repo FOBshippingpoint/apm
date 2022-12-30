@@ -44,29 +44,18 @@ export function message(
   message: string,
   type?: string
 ) {
-  if (type) {
-    for (const originalType of buttonTypes) {
-      const btnOriginalType = 'btn-' + originalType;
-      const btnType = 'btn-' + type;
-      if (btn.classList.contains(btnOriginalType)) {
-        btn.classList.replace(btnOriginalType, btnType);
+  btn.innerText = message;
+  if (!type) return;
+  for (const originalType of buttonTypes) {
+    for (const prefix of ['btn-', 'btn-outline-']) {
+      const btnOriginalType = prefix + originalType;
+      const btnNewType = prefix + type;
+      if (btn.classList.replace(btnOriginalType, btnNewType)) {
         setTimeout(() => {
-          btn.classList.replace(btnType, btnOriginalType);
+          btn.classList.replace(btnNewType, btnOriginalType);
         }, 3000);
-        break;
-      }
-
-      const outlineOriginalType = 'btn-outline-' + originalType;
-      const outlineType = 'btn-outline-' + type;
-      if (btn.classList.contains(outlineOriginalType)) {
-        btn.classList.replace(outlineOriginalType, outlineType);
-        setTimeout(() => {
-          btn.classList.replace(outlineType, outlineOriginalType);
-        }, 3000);
-        break;
+        return;
       }
     }
   }
-
-  btn.innerText = message;
 }
